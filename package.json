@@ -1,0 +1,27 @@
+{
+  "name": "damp-git-runner",
+  "version": "0.0.1",
+  "description": "DAMP test runner for github projects",
+  "main": "damp-runner.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/codehag/DAMP-git-runner.git"
+  },
+  "keywords": [
+    "DAMP",
+    "Dev",
+    "tools",
+    "firefox",
+    "performance",
+    "testing"
+  ],
+  "author": "Yulia Startsev",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/codehag/DAMP-git-runner/issues"
+  },
+  "homepage": "https://github.com/codehag/DAMP-git-runner#readme"
+}

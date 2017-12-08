@@ -1,6 +1,14 @@
 #!/usr/bin/env node
+// libs
 const { spawn, exec } = require("child_process");
-const fs = require("fs");
+const path = require("path");
+
+// utils
+const { getSubtests } = require("./utils/compareCommits.js");
+const { readResults, saveFile, copyToTarget } = require("./utils/file.js");
+const { reduceStrings } = require("./utils/strings.js");
+const { getCommit, getCommits } = require("./utils/getCommit.js");
+const { switchTo } = require("./utils/switchTo.js");
 const args = process.argv.slice(2);
 
 const keyRegex = new RegExp("--");
@@ -18,77 +26,6 @@ args.reduce((currentConfigKey, arg) => {
   return currentConfigKey;
 }, []);
 
-function getCommits(from, to) {
-  return new Promise((resolve, reject) => {
-    exec("git log", (stderr, stdout, err) => {
-      if (stdout) {
-        const commitList = stdout
-          .match(/(commit\s\S*)/g)
-          .map(str => str.replace("commit ", ""));
-
-        if (!from && !to) {
-          resolve([commitList[0]]);
-        }
-        if (from && !to) {
-          const lastIndex = commitList.indexOf(from);
-          const commits = commitList.slice(0, lastIndex);
-          resolve(commits);
-        }
-        if (from && to) {
-          const firstIndex = commitList.indexOf(to);
-          const lastIndex = commitList.indexOf(from);
-          const commits = commitList.slice(firstIndex, lastIndex);
-          resolve(commits);
-        }
-      }
-    });
-  });
-}
-
-function switchTo(commit) {
-  console.log("switch to", commit);
-  return new Promise((resolve, reject) => {
-    exec(`git checkout ${commit}`, (err, stdout, stderr) => {
-      if (!err) {
-        return resolve("done");
-      }
-      console.log("err", err);
-      console.log("stdout", stdout);
-      console.log("stderr", stderr);
-      console.log("not done");
-    });
-  });
-}
-
-function copyToTarget(commit) {
-  console.log("copy target", commit);
-  return new Promise((resolve, reject) => {
-    exec("yarn copy-assets", (stderr, stdout, err) => {
-      return resolve("done");
-    });
-  });
-}
-
-function saveFile(commit, saveLocation) {
-  console.log("save file", commit);
-  return new Promise((resolve, reject) => {
-    exec(
-      `cp ${saveLocation} ./damp/.tmp/${commit}.json`,
-      (stderr, stdout, err) => {
-        return resolve("done");
-      }
-    );
-  });
-}
-
-function reduceStrings(strings, initial) {
-  return strings.reduce(
-    (string, substring) => `${string}
-    ${substring}`,
-    initial
-  );
-}
-
 async function runProcess(config) {
   const command = `${config.target}/mach`;
   let localJSON = "";
@@ -101,26 +38,27 @@ async function runProcess(config) {
     config.tool
   ];
 
-  let commits = config.commits;
-  if (!commits) {
+  let commits = [];
+  if (!config.commits) {
     commits = await getCommits(config.from, config.to);
+  } else {
+    for (commitHash of config.commits) {
+      const doneSwitch = await switchTo(commitHash);
+      const commit = await getCommit(commitHash);
+      commits = [...commits, commit];
+    }
   }
 
   function runDamp(commit) {
     return new Promise(async (resolve, reject) => {
-      const doneSwitch = await switchTo(commit);
-      console.log(doneSwitch);
-      const doneCopy = await copyToTarget(commit);
-      console.log(doneCopy);
+      await switchTo(commit);
+      await copyToTarget(commit);
 
       console.log(`starting...${commit}`);
       const damp = spawn(command, argsTalos);
       damp.on("exit", async code => {
-        console.log(code.toString());
         const saved = await saveFile(commit, localJSON);
-        console.log("save", saved);
-        console.log("DONE");
-        resolve();
+        resolve(saved);
       });
       damp.stderr.on("data", data => {
         if (!localJSON) {
@@ -129,35 +67,19 @@ async function runProcess(config) {
             localJSON = match[1].replace("['", "").replace("']", "");
           }
         }
-        console.log(data.toString());
+        if (config.debug) {
+          console.log(data.toString());
+        }
       });
     });
   }
 
   for (const commit of commits) {
-    await runDamp(commit);
+    await runDamp(commit.hash);
   }
 
-  const results = commits.map(commit => {
-    const commitData = JSON.parse(
-      fs.readFileSync(`./damp/.tmp/${commit}.json`, "utf8")
-    );
-    commitData.commitHash = commit;
-    return commitData;
-  });
-
-  const output = results.map(result => {
-    const subtests = result.suites[0].subtests;
-    const strings = subtests.map(subtest => {
-      const { name, value, unit } = subtest;
-      return `${name}: ${value}${unit}`;
-    });
-
-    return reduceStrings(
-      strings,
-      `\ntest result averages for ${result.commitHash}:`
-    );
-  });
+  const results = commits.map(readResults);
+  const output = results.map(getSubtests);
 
   console.log(reduceStrings(output, "\n\n"));
 }

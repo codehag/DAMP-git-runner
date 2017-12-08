@@ -1,33 +1,7 @@
 #!/usr/bin/env node
-const fs = require("fs");
-const args = process.argv.slice(2);
+const { compareCommits } = require("./utils/compareCommits.js");
 
-const results = args.map(commit => {
-  const commitData = JSON.parse(
-    fs.readFileSync(`./damp/.tmp/${commit}.json`, "utf8")
-  );
-  commitData.commitHash = commit;
-  return commitData;
-});
+const commitList = process.argv.slice(2);
 
-const output = results.map(result => {
-  const subtests = result.suites[0].subtests;
-  const strings = subtests.map(subtest => {
-    const { name, value, unit } = subtest;
-    return `${name}: ${value}${unit}`;
-  });
+compareCommits(commitList).then(output => console.log(output));
 
-  return reduceStrings(
-    strings,
-    `\ntest result averages for ${result.commitHash}:`
-  );
-});
-
-function reduceStrings(strings, initial) {
-  return strings.reduce(
-    (string, substring) => `${string}
-    ${substring}`,
-    initial
-  );
-}
-console.log(reduceStrings(output, "\n\n"));

@@ -1,6 +1,6 @@
 const { getCommit } = require("./getCommit.js");
 const { switchTo } = require("./switchTo.js");
-const { readResults } = require("./readResults.js");
+const { readResults } = require("./file.js");
 const { reduceStrings, commitOutput, averagesOutput } = require("./strings.js");
 
 function getSubtests(result) {
